@@ -53,10 +53,14 @@ class EncodeClipText(
         
     def encode_text_long(self, variation: int, index: int, requested_name: str = None) -> dict:
         tokens = self._get_previous_item(variation, self.in_name, index)
+        print(f"tokens: {tokens}")
         stripped_tokens = tokens[1:-1] # slice off <EOS> and <BOS> tokens
+        print(f"stripped_tokens: {stripped_tokens}")
         chunk_count = stripped_tokens.shape[0] // self.expanded_chunk_size
+        print(f"chunk_count: {chunk_count}")
         # reshape (1,N)->(C,expanded_chunk_size), where C is the number of chunks, N is a multiple of expanded_chunk_size
         stripped_tokens = stripped_tokens.reshape(chunk_count, self.expanded_chunk_size)
+        print(f"stripped_tokens: {stripped_tokens}")
         token_groups = []
         for i in range(0, chunk_count):
             # reassemble each chunk to be <BOS> <chunk_content> <EOS>
@@ -65,8 +69,11 @@ class EncodeClipText(
                 stripped_tokens[i,:],
                 tokens[-1].unsqueeze(0)
             )
+            print(f"chunk: {chunk}")
             token_groups.append(torch.cat(chunk))
+            print(f"token_groups: {token_groups}")
         token_groups = torch.stack(token_groups)
+        print(f"token_groups: {token_groups}")
         
         # TODO: figure out how to handle layer norms... only made this with SDXL in mind and it isn't used there
 
@@ -107,7 +114,8 @@ class EncodeClipText(
     def get_item(self, variation: int, index: int, requested_name: str = None) -> dict:
         if not self.add_layer_norm and self.expand_token_limit and self.expanded_chunk_size != 0:
             return self.encode_text_long(variation, index, requested_name)
-        
+
+        print("Not calling encode_text_long")
         tokens = self._get_previous_item(variation, self.in_name, index)
         tokens = tokens.unsqueeze(0)
 
