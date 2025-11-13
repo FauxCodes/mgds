@@ -21,9 +21,9 @@ class EncodeClipText(
             add_layer_norm: bool,
             hidden_state_output_index: int | None = None,
             autocast_contexts: list[torch.autocast | None] = None,
-            dtype: torch.dtype | None = None
-            # expand_token_limit: bool | None = False,
-            # expanded_chunk_size: int | None = 0
+            dtype: torch.dtype | None = None,
+            expand_token_limit: bool | None = False,
+            expanded_chunk_size: int | None = 0
     ):
         super(EncodeClipText, self).__init__()
         self.in_name = in_name
@@ -33,8 +33,8 @@ class EncodeClipText(
         self.text_encoder = text_encoder
         self.add_layer_norm = add_layer_norm
         self.hidden_state_output_index = hidden_state_output_index
-        # self.expand_token_limit = expand_token_limit
-        # self.expanded_chunk_size = expanded_chunk_size
+        self.expand_token_limit = expand_token_limit
+        self.expanded_chunk_size = expanded_chunk_size
 
         self.autocast_contexts = [nullcontext()] if autocast_contexts is None else autocast_contexts
         self.dtype = dtype
