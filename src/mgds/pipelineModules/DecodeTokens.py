@@ -23,8 +23,12 @@ class DecodeTokens(
     def get_outputs(self) -> list[str]:
         return [self.out_name]
 
-    def get_item(self, variation: int, index: int, requested_name: str = None) -> dict:
+    def get_item(self, variation: int, index: int, requested_name: str = None, expand_clip: bool = False) -> dict:
         tokens = self._get_previous_item(variation, self.in_name, index)
+
+        if expand_clip:
+            tokens = tokens[:, 1, -1]
+            tokens = tokens.reshape(-1)
 
         text = self.tokenizer.decode(
             token_ids=tokens,
