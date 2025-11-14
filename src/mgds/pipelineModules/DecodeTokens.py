@@ -27,7 +27,7 @@ class DecodeTokens(
     def get_item(self, variation: int, index: int, requested_name: str = None) -> dict:
         tokens = self._get_previous_item(variation, self.in_name, index)
 
-        if self.expand_clip:
+        if self.expand_clip and tokens.ndim == 2:
             tokens = tokens[:, 1:-1]
             tokens = tokens.reshape(-1)
 
