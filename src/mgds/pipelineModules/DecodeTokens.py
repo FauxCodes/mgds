@@ -1,3 +1,4 @@
+import torch
 from transformers import CLIPTokenizer
 
 from mgds.PipelineModule import PipelineModule
@@ -30,6 +31,7 @@ class DecodeTokens(
         if self.expand_clip and tokens.ndim == 2:
             tokens = tokens[:, 1:-1]
             tokens = tokens.reshape(-1)
+            tokens = torch.cat([torch.tensor([49406]), tokens, torch.tensor([49407])])
 
         text = self.tokenizer.decode(
             token_ids=tokens,
