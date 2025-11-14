@@ -31,7 +31,8 @@ class DecodeTokens(
         if self.expand_clip and tokens.ndim == 2:
             tokens = tokens[:, 1:-1]
             tokens = tokens.reshape(-1)
-            tokens = torch.cat([torch.tensor([49406]), tokens, torch.tensor([49407])])
+            device = tokens.device
+            tokens = torch.cat([torch.tensor([49406], device=device), tokens, torch.tensor([49407], device=device)])
 
         text = self.tokenizer.decode(
             token_ids=tokens,
