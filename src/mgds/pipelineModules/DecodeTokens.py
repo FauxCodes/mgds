@@ -8,11 +8,12 @@ class DecodeTokens(
     PipelineModule,
     RandomAccessPipelineModule,
 ):
-    def __init__(self, in_name: str, out_name: str, tokenizer: CLIPTokenizer):
+    def __init__(self, in_name: str, out_name: str, tokenizer: CLIPTokenizer, expand_clip: bool = False):
         super(DecodeTokens, self).__init__()
         self.in_name = in_name
         self.out_name = out_name
         self.tokenizer = tokenizer
+        self.expand_clip = expand_clip
 
     def length(self) -> int:
         return self._get_previous_length(self.in_name)
@@ -23,10 +24,10 @@ class DecodeTokens(
     def get_outputs(self) -> list[str]:
         return [self.out_name]
 
-    def get_item(self, variation: int, index: int, requested_name: str = None, expand_clip: bool = False) -> dict:
+    def get_item(self, variation: int, index: int, requested_name: str = None) -> dict:
         tokens = self._get_previous_item(variation, self.in_name, index)
 
-        if expand_clip:
+        if self.expand_clip:
             tokens = tokens[:, 1, -1]
             tokens = tokens.reshape(-1)
 
