@@ -28,7 +28,7 @@ class DecodeTokens(
         tokens = self._get_previous_item(variation, self.in_name, index)
 
         if self.expand_clip:
-            tokens = tokens[:, 1, -1]
+            tokens = tokens[:, 1:-1]
             tokens = tokens.reshape(-1)
 
         text = self.tokenizer.decode(
