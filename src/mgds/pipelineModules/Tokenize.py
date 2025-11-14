@@ -66,8 +66,8 @@ class Tokenize(
                 return_tensors="pt",
             )
 
-        tokens = tokenizer_output.input_ids.to(self.pipeline.device)
-        mask = tokenizer_output.attention_mask.to(self.pipeline.device)
+        tokens = tokenizer_output['input_ids'].to(self.pipeline.device)
+        mask = tokenizer_output['attention_mask'].to(self.pipeline.device)
 
         tokens = tokens.squeeze(dim=0)
         mask = mask.squeeze(dim=0)
