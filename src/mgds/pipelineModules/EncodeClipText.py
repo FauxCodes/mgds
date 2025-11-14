@@ -54,32 +54,12 @@ class EncodeClipText(
     def encode_text_long(self, variation: int, index: int, requested_name: str = None) -> dict:
         tokens = self._get_previous_item(variation, self.in_name, index)
         print(f"tokens: {tokens}")
-        stripped_tokens = tokens[1:-1] # slice off <EOS> and <BOS> tokens
-        print(f"stripped_tokens: {stripped_tokens}")
-        chunk_count = stripped_tokens.shape[0] // self.expanded_chunk_size
-        print(f"chunk_count: {chunk_count}")
-        # reshape (1,N)->(C,expanded_chunk_size), where C is the number of chunks, N is a multiple of expanded_chunk_size
-        stripped_tokens = stripped_tokens.reshape(chunk_count, self.expanded_chunk_size)
-        print(f"stripped_tokens: {stripped_tokens}")
-        token_groups = []
-        for i in range(0, chunk_count):
-            # reassemble each chunk to be <BOS> <chunk_content> <EOS>
-            chunk = (
-                tokens[0].unsqueeze(0),
-                stripped_tokens[i,:],
-                tokens[-1].unsqueeze(0)
-            )
-            print(f"chunk: {chunk}")
-            token_groups.append(torch.cat(chunk))
-            print(f"token_groups: {token_groups}")
-        token_groups = torch.stack(token_groups)
-        print(f"token_groups: {token_groups}")
-        
+
         # TODO: figure out how to handle layer norms... only made this with SDXL in mind and it isn't used there
 
         with self._all_contexts(self.autocast_contexts):
             text_encoder_output = self.text_encoder(
-                token_groups,
+                tokens,
                 attention_mask=None,
                 output_hidden_states=True,
                 return_dict=True,
@@ -98,7 +78,7 @@ class EncodeClipText(
         
         pooled_state = None
         if self.pooled_out_name:
-            if (hasattr(text_encoder_output, "text_embeds")):
+            if hasattr(text_encoder_output, "text_embeds"):
                 pooled_state = text_encoder_output.text_embeds
                 pooled_state = pooled_state.mean(dim=0).reshape((1,pooled_state.shape[-1]))
             elif hasattr(text_encoder_output, "pooler_output"):
