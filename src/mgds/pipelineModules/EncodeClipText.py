@@ -53,7 +53,6 @@ class EncodeClipText(
         
     def encode_text_long(self, variation: int, index: int, requested_name: str = None) -> dict:
         tokens = self._get_previous_item(variation, self.in_name, index)
-        print(f"tokens: {tokens}")
 
         # TODO: figure out how to handle layer norms... only made this with SDXL in mind and it isn't used there
 
@@ -95,7 +94,6 @@ class EncodeClipText(
         if not self.add_layer_norm and self.expand_token_limit and self.expanded_chunk_size != 0:
             return self.encode_text_long(variation, index, requested_name)
 
-        print("Not calling encode_text_long")
         tokens = self._get_previous_item(variation, self.in_name, index)
         tokens = tokens.unsqueeze(0)
 
