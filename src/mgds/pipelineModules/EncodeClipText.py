@@ -1,6 +1,7 @@
 from contextlib import nullcontext
 
 import torch
+from torch import Tensor
 from transformers import CLIPTextModel, CLIPTextModelWithProjection
 
 from mgds.PipelineModule import PipelineModule
@@ -52,21 +53,10 @@ class EncodeClipText(
             return [self.hidden_state_out_name]
         
     def encode_text_long(self, variation: int, index: int, requested_name: str = None) -> dict:
+
         tokens = self._get_previous_item(variation, self.in_name, index)
-        stripped_tokens = tokens[1:-1] # slice off <EOS> and <BOS> tokens
-        chunk_count = stripped_tokens.shape[0] // self.expanded_chunk_size
-        # reshape (1,N)->(C,expanded_chunk_size), where C is the number of chunks, N is a multiple of expanded_chunk_size
-        stripped_tokens = stripped_tokens.reshape(chunk_count, self.expanded_chunk_size)
-        token_groups = []
-        for i in range(0, chunk_count):
-            # reassemble each chunk to be <BOS> <chunk_content> <EOS>
-            chunk = (
-                tokens[0].unsqueeze(0),
-                stripped_tokens[i,:],
-                tokens[-1].unsqueeze(0)
-            )
-            token_groups.append(torch.cat(chunk))
-        token_groups = torch.stack(token_groups)
+
+        token_groups = self._group_tokens(tokens)
         
         # TODO: figure out how to handle layer norms... only made this with SDXL in mind and it isn't used there
 
@@ -103,6 +93,22 @@ class EncodeClipText(
             self.hidden_state_out_name: hidden_state,
             self.pooled_out_name: pooled_state
         }
+
+    def _group_tokens(self, tokens: Tensor):
+        stripped_tokens = tokens[1:-1]  # slice off <EOS> and <BOS> tokens
+        chunk_count = stripped_tokens.shape[0] // self.expanded_chunk_size
+        # reshape (1,N)->(C,expanded_chunk_size), where C is the number of chunks, N is a multiple of expanded_chunk_size
+        stripped_tokens = stripped_tokens.reshape(chunk_count, self.expanded_chunk_size)
+        token_groups = []
+        for i in range(0, chunk_count):
+            # reassemble each chunk to be <BOS> <chunk_content> <EOS>
+            chunk = (
+                tokens[0].unsqueeze(0),
+                stripped_tokens[i, :],
+                tokens[-1].unsqueeze(0)
+            )
+            token_groups.append(torch.cat(chunk))
+        return torch.stack(token_groups)
 
     def get_item(self, variation: int, index: int, requested_name: str = None) -> dict:
         if not self.add_layer_norm and self.expand_token_limit and self.expanded_chunk_size != 0:
