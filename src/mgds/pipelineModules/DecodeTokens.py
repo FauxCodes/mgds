@@ -1,4 +1,3 @@
-import torch
 from transformers import CLIPTokenizer
 
 from mgds.PipelineModule import PipelineModule
@@ -9,12 +8,11 @@ class DecodeTokens(
     PipelineModule,
     RandomAccessPipelineModule,
 ):
-    def __init__(self, in_name: str, out_name: str, tokenizer: CLIPTokenizer, expand_clip: bool = False):
+    def __init__(self, in_name: str, out_name: str, tokenizer: CLIPTokenizer):
         super(DecodeTokens, self).__init__()
         self.in_name = in_name
         self.out_name = out_name
         self.tokenizer = tokenizer
-        self.expand_clip = expand_clip
 
     def length(self) -> int:
         return self._get_previous_length(self.in_name)
@@ -27,12 +25,6 @@ class DecodeTokens(
 
     def get_item(self, variation: int, index: int, requested_name: str = None) -> dict:
         tokens = self._get_previous_item(variation, self.in_name, index)
-
-        if self.expand_clip and tokens.ndim == 2:
-            tokens = tokens[:, 1:-1]
-            tokens = tokens.reshape(-1)
-            device = tokens.device
-            tokens = torch.cat([torch.tensor([49406], device=device), tokens, torch.tensor([49407], device=device)])
 
         text = self.tokenizer.decode(
             token_ids=tokens,
