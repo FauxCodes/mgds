@@ -69,8 +69,9 @@ class Tokenize(
         tokens = tokenizer_output['input_ids'].to(self.pipeline.device)
         mask = tokenizer_output['attention_mask'].to(self.pipeline.device)
 
-        tokens = tokens.squeeze(dim=0)
-        mask = mask.squeeze(dim=0)
+        if not self.expand_clip:
+            tokens = tokens.squeeze(dim=0)
+            mask = mask.squeeze(dim=0)
 
         #unmask n tokens:
         if self.expand_mask > 0:
