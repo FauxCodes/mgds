@@ -1,8 +1,9 @@
 from contextlib import nullcontext
+from typing import List
 
 import torch
 from torch import Tensor
-from transformers import CLIPTextModel, CLIPTextModelWithProjection
+from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
 
 from mgds.PipelineModule import PipelineModule
 from mgds.pipelineModuleTypes.RandomAccessPipelineModule import RandomAccessPipelineModule
@@ -19,6 +20,7 @@ class EncodeClipText(
             hidden_state_out_name: str,
             pooled_out_name: str | None,
             text_encoder: CLIPTextModel | CLIPTextModelWithProjection,
+            tokenizer: CLIPTokenizer,
             add_layer_norm: bool,
             hidden_state_output_index: int | None = None,
             autocast_contexts: list[torch.autocast | None] = None,
@@ -32,6 +34,7 @@ class EncodeClipText(
         self.hidden_state_out_name = hidden_state_out_name
         self.pooled_out_name = pooled_out_name
         self.text_encoder = text_encoder
+        self.tokenizer = tokenizer
         self.add_layer_norm = add_layer_norm
         self.hidden_state_output_index = hidden_state_output_index
         self.expand_token_limit = expand_token_limit
@@ -56,7 +59,7 @@ class EncodeClipText(
 
         tokens = self._get_previous_item(variation, self.in_name, index)
 
-        token_groups = self._group_tokens(tokens)
+        token_groups = self._group_tokens2(tokens, self.tokenizer)
         
         # TODO: figure out how to handle layer norms... only made this with SDXL in mind and it isn't used there
 
@@ -110,6 +113,12 @@ class EncodeClipText(
             token_groups.append(torch.cat(chunk))
         return torch.stack(token_groups)
 
+    def _group_tokens2(self, tokens: Tensor, tokenizer: CLIPTokenizer, clip_chunk_size: int = 75):
+        if tokens.dim() == 2:
+            tokens = tokens.squeeze(0)
+        text = tokenizer.decode(tokens)
+        return _chunk_prompt(text, tokenizer)
+
     def get_item(self, variation: int, index: int, requested_name: str = None) -> dict:
         if not self.add_layer_norm and self.expand_token_limit and self.expanded_chunk_size != 0:
             return self.encode_text_long(variation, index, requested_name)
@@ -160,3 +169,33 @@ class EncodeClipText(
             self.hidden_state_out_name: hidden_state,
             self.pooled_out_name: pooled_state,
         }
+
+def _chunk_prompt(text: str, tokenizer: CLIPTokenizer, chunk_size: int = 75) -> List[str]:
+    tokens = tokenizer.encode(text)
+    content_tokens = tokens[1:-1] if tokens[0] == tokenizer.bos_token_id else tokens
+
+    chunks = []
+    curr_chunk = []
+
+    for token in content_tokens:
+        if len(curr_chunk) < chunk_size:
+            curr_chunk.append(token)
+        else:
+            chunk_text = tokenizer.decode(curr_chunk)
+            if ', ' in chunk_text:
+                parts = chunk_text.rsplit(', ', 1)
+                if len(parts) == 2:
+                    first_part, remaining = parts
+                    if first_part:
+                        chunks.append(first_part + ',')
+                    curr_chunk = tokenizer.encode(remaining)[1:-1]
+                    curr_chunk.append(token)
+                    continue
+
+            chunks.append(chunk_text)
+            curr_chunk = [token]
+
+    if curr_chunk:
+        chunks.append(tokenizer.decode(curr_chunk))
+
+    return chunks
