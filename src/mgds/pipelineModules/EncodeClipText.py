@@ -54,13 +54,14 @@ class EncodeClipText(
             return [self.hidden_state_out_name, self.pooled_out_name]
         else:
             return [self.hidden_state_out_name]
-        
+
     def encode_text_long(self, variation: int, index: int, requested_name: str = None) -> dict:
 
         tokens = self._get_previous_item(variation, self.in_name, index)
 
         token_groups = self._group_tokens2(tokens, self.tokenizer)
-        
+        # token_groups = self._group_tokens(tokens)
+
         # TODO: figure out how to handle layer norms... only made this with SDXL in mind and it isn't used there
 
         with self._all_contexts(self.autocast_contexts):
@@ -81,7 +82,7 @@ class EncodeClipText(
             hidden_state_content.unsqueeze(0)[0,:,:],
             hidden_state[0,-1,:].unsqueeze(0)
         ]).squeeze()
-        
+
         pooled_state = None
         if self.pooled_out_name:
             if (hasattr(text_encoder_output, "text_embeds")):
@@ -116,13 +117,14 @@ class EncodeClipText(
     def _group_tokens2(self, tokens: Tensor, tokenizer: CLIPTokenizer, clip_chunk_size: int = 75):
         if tokens.dim() == 2:
             tokens = tokens.squeeze(0)
-        text = tokenizer.decode(tokens)
-        return _chunk_prompt(text, tokenizer)
+        text = tokenizer.decode(tokens, skip_special_tokens=True)
+        chunks = _chunk_prompt(text, tokenizer)
+        return tokenize_chunked(chunks, tokenizer, clip_chunk_size).to(self.pipeline.device)
 
     def get_item(self, variation: int, index: int, requested_name: str = None) -> dict:
         if not self.add_layer_norm and self.expand_token_limit and self.expanded_chunk_size != 0:
             return self.encode_text_long(variation, index, requested_name)
-        
+
         tokens = self._get_previous_item(variation, self.in_name, index)
         tokens = tokens.unsqueeze(0)
 
@@ -169,6 +171,21 @@ class EncodeClipText(
             self.hidden_state_out_name: hidden_state,
             self.pooled_out_name: pooled_state,
         }
+
+
+def tokenize_chunked(chunks: List[str], tokenizer: CLIPTokenizer, chunk_size: int = 75) -> Tensor:
+    tokenized_chunks = []
+    for chunk in chunks:
+        tokenized = tokenizer(
+            chunk,
+            max_length=chunk_size + 2,
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt"
+        )
+        tokenized_chunks.append(tokenized)
+
+    return torch.cat([chunk['input_ids'] for chunk in tokenized_chunks], dim=0)
 
 def _chunk_prompt(text: str, tokenizer: CLIPTokenizer, chunk_size: int = 75) -> List[str]:
     tokens = tokenizer.encode(text)
