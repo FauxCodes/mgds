@@ -26,7 +26,8 @@ class EncodeClipText(
             autocast_contexts: list[torch.autocast | None] = None,
             dtype: torch.dtype | None = None,
             expand_token_limit: bool = False,
-            expanded_chunk_size: int = 0
+            expanded_chunk_size: int = 75,
+            expanded_max_chunks: int = 3,
     ):
         super(EncodeClipText, self).__init__()
         self.in_name = in_name
@@ -39,6 +40,7 @@ class EncodeClipText(
         self.hidden_state_output_index = hidden_state_output_index
         self.expand_token_limit = expand_token_limit
         self.expanded_chunk_size = expanded_chunk_size
+        self.expanded_max_chunks = expanded_max_chunks
 
         self.autocast_contexts = [nullcontext()] if autocast_contexts is None else autocast_contexts
         self.dtype = dtype
@@ -59,8 +61,8 @@ class EncodeClipText(
 
         tokens = self._get_previous_item(variation, self.in_name, index)
 
-        token_groups = self._group_tokens2(tokens, self.tokenizer)
-        # token_groups = self._group_tokens(tokens)
+        token_groups = self._group_tokens2(tokens, self.tokenizer, self.expanded_max_chunks)
+        # token_groups = self._group_tokens(tokens, self.expanded_max_chunks)
 
         # TODO: figure out how to handle layer norms... only made this with SDXL in mind and it isn't used there
 
@@ -98,7 +100,7 @@ class EncodeClipText(
             self.pooled_out_name: pooled_state
         }
 
-    def _group_tokens(self, tokens: Tensor):
+    def _group_tokens(self, tokens: Tensor, max_chunks: int = 3):
         stripped_tokens = tokens[1:-1]  # slice off <EOS> and <BOS> tokens
         chunk_count = stripped_tokens.shape[0] // self.expanded_chunk_size
         # reshape (1,N)->(C,expanded_chunk_size), where C is the number of chunks, N is a multiple of expanded_chunk_size
@@ -112,13 +114,15 @@ class EncodeClipText(
                 tokens[-1].unsqueeze(0)
             )
             token_groups.append(torch.cat(chunk))
+
+        token_groups = token_groups[:max_chunks]
         return torch.stack(token_groups)
 
-    def _group_tokens2(self, tokens: Tensor, tokenizer: CLIPTokenizer, clip_chunk_size: int = 75):
+    def _group_tokens2(self, tokens: Tensor, tokenizer: CLIPTokenizer, clip_chunk_size: int = 75, max_chunks: int = 3):
         if tokens.dim() == 2:
             tokens = tokens.squeeze(0)
         text = tokenizer.decode(tokens, skip_special_tokens=True)
-        chunks = _chunk_prompt(text, tokenizer)
+        chunks = _chunk_prompt(text, tokenizer, max_chunks)
         return tokenize_chunked(chunks, tokenizer, clip_chunk_size).to(self.pipeline.device)
 
     def get_item(self, variation: int, index: int, requested_name: str = None) -> dict:
@@ -187,7 +191,7 @@ def tokenize_chunked(chunks: List[str], tokenizer: CLIPTokenizer, chunk_size: in
 
     return torch.cat([chunk['input_ids'] for chunk in tokenized_chunks], dim=0)
 
-def _chunk_prompt(text: str, tokenizer: CLIPTokenizer, chunk_size: int = 75) -> List[str]:
+def _chunk_prompt(text: str, tokenizer: CLIPTokenizer, chunk_size: int = 75, max_chunks: int = 3) -> List[str]:
     tokens = tokenizer.encode(text)
     content_tokens = tokens[1:-1] if tokens[0] == tokenizer.bos_token_id else tokens
 
@@ -215,4 +219,4 @@ def _chunk_prompt(text: str, tokenizer: CLIPTokenizer, chunk_size: int = 75) -> 
     if curr_chunk:
         chunks.append(tokenizer.decode(curr_chunk))
 
-    return chunks
+    return chunks[:max_chunks]
