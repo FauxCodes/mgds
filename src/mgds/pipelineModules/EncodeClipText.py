@@ -61,8 +61,8 @@ class EncodeClipText(
 
         tokens = self._get_previous_item(variation, self.in_name, index)
 
-        token_groups = self._group_tokens2(tokens, self.tokenizer, self.expanded_max_chunks)
-        # token_groups = self._group_tokens(tokens, self.expanded_max_chunks)
+        # token_groups = self._group_tokens2(tokens)
+        token_groups = self._group_tokens(tokens)
 
         # TODO: figure out how to handle layer norms... only made this with SDXL in mind and it isn't used there
 
@@ -100,7 +100,7 @@ class EncodeClipText(
             self.pooled_out_name: pooled_state
         }
 
-    def _group_tokens(self, tokens: Tensor, max_chunks: int = 3):
+    def _group_tokens(self, tokens: Tensor):
         stripped_tokens = tokens[1:-1]  # slice off <EOS> and <BOS> tokens
         chunk_count = stripped_tokens.shape[0] // self.expanded_chunk_size
         # reshape (1,N)->(C,expanded_chunk_size), where C is the number of chunks, N is a multiple of expanded_chunk_size
@@ -115,15 +115,17 @@ class EncodeClipText(
             )
             token_groups.append(torch.cat(chunk))
 
-        token_groups = token_groups[:max_chunks]
+        token_groups = token_groups[:self.expanded_max_chunks]
         return torch.stack(token_groups)
 
-    def _group_tokens2(self, tokens: Tensor, tokenizer: CLIPTokenizer, clip_chunk_size: int = 75, max_chunks: int = 3):
+    def _group_tokens2(self, tokens: Tensor):
         if tokens.dim() == 2:
             tokens = tokens.squeeze(0)
+
+        tokenizer = self.tokenizer
         text = tokenizer.decode(tokens, skip_special_tokens=True)
-        chunks = _chunk_prompt(text, tokenizer, max_chunks)
-        return tokenize_chunked(chunks, tokenizer, clip_chunk_size).to(self.pipeline.device)
+        chunks = _chunk_prompt(text, tokenizer, self.expanded_max_chunks)
+        return tokenize_chunked(chunks, tokenizer, self.expanded_chunk_size).to(self.pipeline.device)
 
     def get_item(self, variation: int, index: int, requested_name: str = None) -> dict:
         if not self.add_layer_norm and self.expand_token_limit and self.expanded_chunk_size != 0:
