@@ -22,6 +22,8 @@ class EncodeClipText(
             hidden_state_output_index: int | None = None,
             autocast_contexts: list[torch.autocast | None] = None,
             dtype: torch.dtype | None = None,
+            chunk_if_needed: bool = False,
+            chunk_size: int = 75,
     ):
         super(EncodeClipText, self).__init__()
         self.in_name = in_name
@@ -30,10 +32,13 @@ class EncodeClipText(
         self.pooled_out_name = pooled_out_name
         self.text_encoder = text_encoder
         self.add_layer_norm = add_layer_norm
-        self.hidden_state_output_index = hidden_state_output_index
+        self.hidden_state_output_index = -1 if hidden_state_output_index is None else hidden_state_output_index
 
         self.autocast_contexts = [nullcontext()] if autocast_contexts is None else autocast_contexts
         self.dtype = dtype
+
+        self.chunk_if_needed = chunk_if_needed
+        self.chunk_size = chunk_size
 
     def length(self) -> int:
         return self._get_previous_length(self.in_name)
@@ -47,7 +52,7 @@ class EncodeClipText(
         else:
             return [self.hidden_state_out_name]
 
-    def get_item(self, variation: int, index: int, requested_name: str = None, chunk_if_needed: bool = False, chunk_size: int = 75) -> dict:
+    def get_item(self, variation: int, index: int, requested_name: str = None) -> dict:
         tokens = self._get_previous_item(variation, self.in_name, index)
 
         if self.tokens_attention_mask_in_name is not None:
@@ -55,8 +60,8 @@ class EncodeClipText(
         else:
             tokens_attention_mask = None
 
-        if chunk_if_needed and tokens.shape[0] > 77:
-            return self._get_item_chunked(tokens, tokens_attention_mask, chunk_size)
+        if self.chunk_if_needed and tokens.shape[0] > 77:
+            return self._get_item_chunked(tokens, tokens_attention_mask, self.chunk_size)
         else:
             return self._get_item_single(tokens, tokens_attention_mask)
 
@@ -150,7 +155,7 @@ class EncodeClipText(
                 pooled_states.append(res[self.pooled_out_name])
 
         hidden_state = torch.cat(hidden_states, dim=0)
-        pooled_state = torch.mean(torch.stack(pooled_states), dim=0) if self.pooled_out_name else None
+        pooled_state = pooled_states[-1] if self.pooled_out_name else None
 
         return {
             self.hidden_state_out_name: hidden_state,
