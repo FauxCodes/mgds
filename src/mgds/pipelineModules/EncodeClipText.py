@@ -47,7 +47,7 @@ class EncodeClipText(
         else:
             return [self.hidden_state_out_name]
 
-    def get_item(self, variation: int, index: int, requested_name: str = None, chunk_if_needed: bool = False) -> dict:
+    def get_item(self, variation: int, index: int, requested_name: str = None, chunk_if_needed: bool = False, chunk_size: int = 75) -> dict:
         tokens = self._get_previous_item(variation, self.in_name, index)
 
         if self.tokens_attention_mask_in_name is not None:
@@ -56,7 +56,7 @@ class EncodeClipText(
             tokens_attention_mask = None
 
         if chunk_if_needed and tokens.shape[0] > 77:
-            return self._get_item_chunked(tokens, tokens_attention_mask)
+            return self._get_item_chunked(tokens, tokens_attention_mask, chunk_size)
         else:
             return self._get_item_single(tokens, tokens_attention_mask)
 
@@ -102,8 +102,8 @@ class EncodeClipText(
             self.pooled_out_name: pooled_state,
         }
 
-    def _get_item_chunked(self, tokens: torch.Tensor, tokens_attention_mask: torch.Tensor | None) -> dict:
-        # split tokens into chunks of 75 tokens, and add BOS/EOS to each
+    def _get_item_chunked(self, tokens: torch.Tensor, tokens_attention_mask: torch.Tensor | None, chunk_size: int) -> dict:
+        # split tokens into chunks of chunk_size tokens, and add BOS/EOS to each
         bos_token = tokens[0]
         eos_token = tokens[-1]
 
@@ -112,27 +112,27 @@ class EncodeClipText(
         if tokens_attention_mask is not None:
             tokens_attention_mask = tokens_attention_mask[1:-1]
 
-        # split into chunks of 75
-        input_id_chunks = tokens.split(75)
+        # split into chunks of chunk_size
+        input_id_chunks = tokens.split(chunk_size)
         if tokens_attention_mask is not None:
-            attention_mask_chunks = tokens_attention_mask.split(75)
+            attention_mask_chunks = tokens_attention_mask.split(chunk_size)
         else:
             attention_mask_chunks = [None] * len(input_id_chunks)
 
         last_input_id_chunk = input_id_chunks[-1]
-        if len(last_input_id_chunk) < 75:
+        if len(last_input_id_chunk) < chunk_size:
             # pad last chunk with EOS
             input_id_chunks = list(input_id_chunks)
             input_id_chunks[-1] = torch.cat([
                 last_input_id_chunk,
-                torch.full((75 - len(last_input_id_chunk),), eos_token, dtype=tokens.dtype, device=tokens.device)
+                torch.full((chunk_size - len(last_input_id_chunk),), eos_token, dtype=tokens.dtype, device=tokens.device)
             ])
             if tokens_attention_mask is not None:
                 attention_mask_chunks = list(attention_mask_chunks)
                 last_attention_mask_chunk = attention_mask_chunks[-1]
                 attention_mask_chunks[-1] = torch.cat([
                     last_attention_mask_chunk,
-                    torch.full((75 - len(last_attention_mask_chunk),), 0, dtype=tokens_attention_mask.dtype, device=tokens_attention_mask.device)
+                    torch.full((chunk_size - len(last_attention_mask_chunk),), 0, dtype=tokens_attention_mask.dtype, device=tokens_attention_mask.device)
                 ])
 
         # add BOS and EOS to each chunk
